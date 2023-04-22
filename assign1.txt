@@ -1,0 +1,270 @@
+Assignment 1 
+
+Clarifications/QA in file assign1Addendum.txt
+-------------------------------------------------------------------------------------
+
+Submissions:
+-----------
+
+Submit one file at a time using submit-cps590dwoit 
+
+Only the final submission (Feb 27) is graded. However, it is ineligible
+for grading (zero) unless the previous 8 files were submitted by their 
+due dates (Feb 20, 23). It is possible that by Feb 20 and/or 23, some of 
+the files might be empty because you haven't worked on that part yet. 
+Nonetheless, STILL SUBMIT the required files (on Feb 20 and 23), even if 
+some (or all) are empty. 
+On Feb 20 and 23 you MUST submit EVERYTHING you have for the assignment 
+so far. 
+
+YOUR ASSIGNMENT MUST COMPILE AND RUN PROPERLY ON THE MOONS. 
+We suggest you do all your development on the moons.  However, if you choose 
+to develop elsewhere, then make sure you download your files to the moons 
+and submit as required by all the required dates. If you're developing 
+elsewhere, don't attempt to download to moons and do your final submission
+at the last minute. Why? Because your program(s) likely won't compile 
+and/or run as you expect on the moons (because your development environment 
+differs.) If this happens, you likely won't have enough time to debug.
+
+
+Due Dates:
+---------
+
+Files are due by 11:59pm on their due dates. 
+Late submissions are not graded.
+
+Monday Feb 20:
+  Feb20director.sh
+  Feb20scheduler.c
+  Feb20worker.c
+  Feb20queue.c
+  Feb20queue.h 
+  Feb20queueX.h  Optional: X is a string of your choice
+                 (only necessary if you have more than one .h file)
+
+Monday Feb 23:
+  Feb23director.sh
+  Feb23scheduler.c
+  Feb23worker.c
+  Feb23queue.c
+  Feb23queue.h 
+  Feb23queueX.h  as above, optional.
+
+Monday Feb 27 (graded): 
+  director.sh
+  scheduler.c
+  scheduler (executable)
+  worker.c
+  worker (executable)
+  queue.c
+  queue.o (object code)
+  queue.h 
+  queueX.h  as above, optional.
+
+
+The task:
+--------
+
+The task is to create exactly W files, with each file containing exactly  40 '*' 
+characters, and nothing else. The task must be accomplished using 3 programs as follows:
+
+  worker:    a C program that creates a file and writes 40 '*' characters into it.
+  director:  a bash shell program to create W worker processes and monitor their progress 
+             (each worker writes into a different file). 
+  scheduler: a C program to coordinate the W worker processes via some scheduling 
+             algorithm, using one or more queues
+
+Details: 
+  -no busy-waits are allowed in any program. Instead, use an appropriate function from 
+   section 2 or 3 of the manual such as: sleep(),  pause(), sigsuspend(), sigwaitinfo(), etc.
+  -programs must behave robustly (e.g., do something reasonable when a process it needs is 
+   unexpectedly dead.)
+  -programs must exhibit the behaviors outlined below. 
+
+
+director (bash shell program):  
+------------------------------
+   The director needs two command-line arguments:
+       W    (the number of workers to create) 
+       sPID (the process ID of the already-executing scheduler process)
+
+   The director starts W worker processes to run in background, each with its own file.
+   Then, once per second, forever, director calls a local function named display, which
+   clears the screen, then prints the contents of the W files, in order, on stdout.
+   The director terminates when it receives the SIGINT signal (e.g., ctrl-c from keyboard).
+   The director traps SIGINT so that it may perform "clean-up" before terminating, 
+   including making sure the W worker processes are terminated and deleting the W files. 
+   See man page for trap.
+   Director must name files something reasonable.
+   Director requires scheduler to be executing already (needs its process ID).
+
+
+worker (C program):
+-------------------
+   A worker needs 2 command-line arguments: 
+      filename   (name of its given file)
+      sPID       (the process ID of the executing scheduler process)
+
+   The worker writes 40 '*' characters into a its given file, one at a time, one per 
+   second. When worker is finished its task, its given file simply contains one long 
+   string of '*' characters:
+****************************************
+   
+   A worker must not begin writing '*'s until the scheduler signals it may begin. 
+   How this happens:
+     1. The worker sends scheduler a signal to request scheduler include it in the 
+        scheduling pool (use an appropriate signal).
+     2. The worker waits until it receives some acknowledgement signal from scheduler  
+        (use something appropriate such as sigstop or sigwaitinfo() ).
+     3. When worker receives its acknowledgement signal, it begins writing the '*'s.
+
+   When worker has printed all its '*'s, it sends scheduler a signal (to indicate its 
+   task is complete), and then it terminates.
+
+   Note: the worker does not "know it", but while it's writing '*'s, the scheduler 
+         may suspend and resume its execution any number of times.
+   
+   
+scheduler (C program):
+---------------------
+   The scheduler needs 3 command-line arguments: 
+        W   (the number of workers to expect)
+        T   (the length of a timeslice (in whatever units you choose)
+        SA  (the scheduling algorithm)
+
+   The scheduler waits for all W workers to request scheduling (via appropriate signals). 
+   The scheduler repeats the following until all workers have completed their task:
+
+           1. select a worker, w, from among those who are still working at their task 
+              (see "Scheduling Algorithm" below) 
+           2. allow w to run for its timeslice
+
+   The scheduler will send only ONE acknowledgement signal to a given worker. That 
+   acknowledgement signal means "you may begin writing your *s". After that, the worker 
+   simply works away, and the scheduler takes care of suspending and restarting it.
+
+   Once all workers have signalled completion of their tasks, scheduler does any 
+   necessary "clean up" and terminates.
+
+   Note that scheduler allows only one worker to execute at a time; the other workers 
+   are waiting (non-busy wait).
+   
+   Scheduling Algorithms (Round-Robin and Lucky-7):
+   ------------------------------------
+   The scheduler's third argument indicates the algorithm to use.
+   The only acceptable values are RR (round-robin) or L7 (lucky-seven).
+   Round-robin:
+     Assume workers are "ordered" by the order in which their "request scheduling" 
+     signals arrived. When worker i has exhausted its timeslice, the next worker 
+     chosen is normally the next one in order, i.e., (i+1) mod W. However, if that 
+     next worker has been removed from scheduling (it has completed or has died) the 
+     scheduler goes on to the next worker, (i+2) mod W, etc. Implement this 
+     round-robin scheduling by making (efficient) use of a circular queue of workers.
+   Lucky-7:
+     Like round-robin, except that the length of the timeslice is doubled for those
+     workers who have a 7 anywhere in the last 4 digits of their process id. (See 
+     Timeslices below).
+   
+   Timeslices: 
+   ----------
+   Timeslices are maintained by the scheduler, not by individual workers.
+   The scheduler allows a worker, i, one timeslice as follows:
+     -The scheduler dispatches worker i (via an appropriate signal)
+     -The scheduler does a non-busy wait for one timeslice 
+     -When the timeslice is up, scheduler suspends worker i (uses an appropriate 
+      signal)
+
+queue (C code):
+--------------
+   The scheduler requires at least one queue of processes. Implement your queue 
+   data structures and operations here.
+   
+   
+
+SOME (HOPEFULLY HELPFUL) NOTES:
+
+Queuing up signals:
+-------------------
+  If you find the scheduler is losing some of the worker's "request for scheduling" 
+  signals, you might try using a real-time signal instead of a standard signal 
+  (since real-time signals are queued up). Some real-time signals are SIGRTMIN, 
+  SIGRTMIN+1, etc.
+
+To find the signal sender's PID: 
+-------------------------------
+  One way is, instead of using signal() to set up a signal handler, could use 
+  sigaction() with the SA_SIGINFO flag. Then the siginfo_t structure is populated 
+  with extra information about the signal, including the sender's PID (in field 
+  si_pid).
+
+To simply check if a process exists: 
+-----------------------------------
+  Send it signal 0 using kill, and check the return value of kill.
+  From man 2 kill:
+     If sig is 0, then no signal is sent, but error checking is still performed; 
+     this can be used to check for the existence of a process ID
+  
+To send a signal to self:
+------------------------
+  Can use raise()
+
+Some man pages about signals:
+----------------------------
+man 7 signal
+man signal.h
+https://manpages.ubuntu.com/manpages/trusty/man7/signal.h.7posix.html
+
+Output buffering:
+----------------
+  If you find your output files are blank until the file is closed, it's probably 
+  because you are using one of the "printf" family of C functions to write '*'s 
+  into the file. These may buffer output until the file is closed.
+  The C "fflush" function can help.
+  Note that there are other ways to write '*'s into the file that don't cause this 
+  exact buffering problem. Use whatever works for you.
+
+Testing your code:
+-----------------
+  The scheduler must be running before the director. You may choose to create your 
+  own testing script that starts scheduler, gets its process ID, and then starts 
+  the director (sending that process ID). Do not submit it.
+
+Error-Checking:
+--------------
+  Your programs should be robust. Error-check your program's parameters, regardless.
+  For example, workers should check their arguments, even though they are invoked
+  by the director, presumably correctly. Note that someone/something else may attempt
+  to invoke any of your programs. If arguments are incorrect, your programs should 
+  produce appropriate and meaningful error messages.
+
+Do Your Own Work:
+----------------
+  Do not copy code from other students, from the internet, etc. Write all your 
+  work yourself. It will be tempting to snarf a queue implementation from somewhere,
+  but resist the temptation. Your code may be analyzed by plagiarism detection
+  software. Any suspected copying must be reported to the CS Department Head, and
+  the Academic Integrity Office for investigation. The minimum penalty for Academic
+  Misconduct in CS is zero on the work, PLUS A SUBSTANTIAL ADDITIONAL PENALTY (such 
+  as a reduction in the course grade up to F). 
+
+Documentation:
+-------------
+  Provide meaningful comments throughout (including functions etc).
+  At the top of each source file, include a comment with your 
+  Name, Student ID, TMU email (note: that's TMU email, NOT your CS email.)
+
+
+
+Marking:
+-------
+  This is the basic breakdown (subject to change). Further breakdown is 
+  not provided, as specifics depend on the given submission.
+  ---------------------------------------------------------------------
+  8  Director 
+  8  Worker 
+  16 Scheduler and Queue
+  3  Error-checking, robustness, etc. 
+  3  Style and Documentation (modularity, algorithms, efficiency, etc.)
+
+  -n Deductions
+  ---------------------------------------------------------------------
